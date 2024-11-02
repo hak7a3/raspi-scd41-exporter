@@ -1,0 +1,14 @@
+[package]
+name = "raspi-scd41-exporter"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.20", features = ["derive"] }
+embedded-hal = "1.0.0"
+env_logger = "0.11.5"
+log = "0.4.22"
+metrics = "0.24.0"
+metrics-exporter-prometheus = "0.16.0"
+rppal = { version = "0.19.0", features = ["hal"] }
+sensirion-i2c = "0.4.0"
