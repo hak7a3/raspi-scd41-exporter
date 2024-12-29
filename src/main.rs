@@ -15,6 +15,8 @@ mod scd41;
 struct Args {
     #[arg(short, long, default_value_t = String::from("0.0.0.0:9000"))]
     server: String,
+    #[arg(short, long, default_value_t = 4.0)]
+    offset: f32,
 }
 
 fn main() {
@@ -30,6 +32,7 @@ fn main() {
     scd41::clean_state(&mut i2c);
     let serial = scd41::read_serial(&mut i2c).expect("failed to read serial from scd41");
     log::info!("scd41's serial number: 0x{:x}", serial);
+    scd41::set_temperature_offset(&mut i2c, args.offset).expect("failed to set temperature offset");
     scd41::start_periodic_measurement(&mut i2c).expect("failed to start scd41");
     thread::sleep(Duration::from_secs(5));
 
@@ -37,6 +40,8 @@ fn main() {
     let temp = metrics::gauge!("scd41_temperature_celsius");
     let hum = metrics::gauge!("scd41_humidity_rh");
     let last_measured = metrics::gauge!("scd41_last_measured_timestamp_ms");
+    let temp_offset = metrics::gauge!("scd41_temperature_offset_celsius");
+    temp_offset.set(args.offset);
 
     loop {
         thread::sleep(Duration::from_secs(1));

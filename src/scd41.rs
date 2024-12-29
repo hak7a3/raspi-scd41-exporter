@@ -3,9 +3,15 @@
 use std::{thread, time::Duration};
 
 use embedded_hal::i2c;
-use sensirion_i2c::i2c::{read_words_with_crc, write_command_u16, Error};
+use sensirion_i2c::{crc8, i2c::{read_words_with_crc, write_command_u16, Error}};
 
 const SCD41_I2C_ADDR: u8 = 0x62;
+
+pub(crate) struct Measurement {
+    pub(crate) co2: u16,
+    pub(crate) temperature: f32,
+    pub(crate) humidity: f32,
+}
 
 /// clean scd41's state.
 pub(crate) fn clean_state<I: i2c::I2c>(i2c: &mut I) {
@@ -49,9 +55,13 @@ pub(crate) fn read_serial<I: i2c::I2c>(i2c: &mut I) -> Result<u64, Error<I>> {
 
     let mut buf = [0; 9];
     read_words_with_crc(i2c, SCD41_I2C_ADDR, &mut buf)?;
-    return Ok(u64::from_be_bytes([
-        0, 0, buf[0], buf[1], buf[3], buf[4], buf[6], buf[7],
-    ]));
+    let serial = ((buf[0] as u64) << 40)
+        | ((buf[1] as u64) << 32)
+        | ((buf[3] as u64) << 24)
+        | ((buf[4] as u64) << 16)
+        | ((buf[6] as u64) << 8)
+        | (buf[7] as u64);
+    return Ok(serial);
 }
 
 /// data ready (0xE4B8)
@@ -61,16 +71,9 @@ pub(crate) fn get_data_ready_status<I: i2c::I2c>(i2c: &mut I) -> Result<bool, Er
 
     let mut buf = [0; 3];
     read_words_with_crc(i2c, SCD41_I2C_ADDR, &mut buf)?;
-    // TODO: crc check
-    let status = u16::from_be_bytes([buf[0], buf[1]]);
+    let status = ((buf[0] as u16) << 8) | (buf[1] as u16);
     log::info!("ready value {:x}", status);
     return Ok((status & 0x7FF) != 0);
-}
-
-pub(crate) struct Measurement {
-    pub(crate) co2: u16,
-    pub(crate) temperature: f32,
-    pub(crate) humidity: f32,
 }
 
 /// read_measurement (0xEC05)
@@ -81,13 +84,40 @@ pub(crate) fn read_measurement<I: i2c::I2c>(i2c: &mut I) -> Result<Measurement, 
     let mut buf = [0; 9];
     read_words_with_crc(i2c, SCD41_I2C_ADDR, &mut buf)?;
 
-    let raw_co2 = u16::from_be_bytes([buf[0], buf[1]]);
-    let raw_temperature = u16::from_be_bytes([buf[3], buf[4]]);
-    let raw_humidity = u16::from_be_bytes([buf[6], buf[7]]);
+    let raw_co2 = ((buf[0] as u16) << 8) | (buf[1] as u16);
+    let raw_temperature = ((buf[3] as u16) << 8) | (buf[4] as u16);
+    let raw_humidity = ((buf[6] as u16) << 8) | (buf[7] as u16);
 
     return Ok(Measurement {
         co2: raw_co2,
-        temperature: raw_temperature as f32 * 175_f32 / 65536_f32 - 45_f32,
-        humidity: raw_humidity as f32 * 100_f32 / 65536_f32,
+        temperature: raw_temperature as f32 * 175_f32 / 65535_f32 - 45_f32,
+        humidity: raw_humidity as f32 * 100_f32 / 65535_f32,
     });
+}
+
+#[allow(dead_code)]
+/// get_temperature_offset (0x2318)
+pub(crate) fn get_temperature_offset<I: i2c::I2c>(i2c: &mut I) -> Result<f32, Error<I>> {
+    write_command_u16(i2c, SCD41_I2C_ADDR, 0x2318).map_err(Error::I2cWrite)?;
+    thread::sleep(Duration::from_millis(1));
+
+    let mut buf = [0; 3];
+    read_words_with_crc(i2c, SCD41_I2C_ADDR, &mut buf)?;
+    let offset = ((buf[0] as u16) << 8) | (buf[1] as u16);
+    return Ok(offset as f32 * 175_f32 / 65535_f32);
+}
+
+/// set_temperature_offset (0x241d)
+pub(crate) fn set_temperature_offset<I: i2c::I2c>(i2c: &mut I, offset: f32) -> Result<(), Error<I>> {
+    let offset = offset * 65535_f32 / 175_f32;
+    let offset = offset as u16;
+    let data = offset.to_be_bytes();
+
+    let mut buf = [0_u8; 5];
+    buf[0..2].copy_from_slice(&(0x241d_u16).to_be_bytes());
+    buf[2..4].copy_from_slice(&data);
+    buf[4] = crc8::calculate(&data);
+
+    i2c.write(SCD41_I2C_ADDR, &buf).map_err(Error::I2cWrite)?;
+    return Ok(());
 }
