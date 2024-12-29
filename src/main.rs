@@ -33,10 +33,10 @@ fn main() {
     scd41::start_periodic_measurement(&mut i2c).expect("failed to start scd41");
     thread::sleep(Duration::from_secs(5));
 
-    let co2 = metrics::gauge!("co2_ppm");
-    let temp = metrics::gauge!("temperature_celsius");
-    let hum = metrics::gauge!("humidity_rh");
-    let last_measured = metrics::gauge!("last_measured_timestamp_ms");
+    let co2 = metrics::gauge!("scd41_co2_ppm");
+    let temp = metrics::gauge!("scd41_temperature_celsius");
+    let hum = metrics::gauge!("scd41_humidity_rh");
+    let last_measured = metrics::gauge!("scd41_last_measured_timestamp_ms");
 
     loop {
         thread::sleep(Duration::from_secs(1));
