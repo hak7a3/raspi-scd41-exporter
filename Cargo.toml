@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = { version = "4.5.20", features = ["derive"] }
+clap = { version = "4.5.23", features = ["derive"] }
 embedded-hal = "1.0.0"
-env_logger = "0.11.5"
+env_logger = "0.11.6"
 log = "0.4.22"
-metrics = "0.24.0"
+metrics = "0.24.1"
 metrics-exporter-prometheus = "0.16.0"
-rppal = { version = "0.19.0", features = ["hal"] }
+rppal = { version = "0.22.1", features = ["hal"] }
 sensirion-i2c = "0.4.0"
